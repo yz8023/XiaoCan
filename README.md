@@ -31,6 +31,12 @@
 4. **网络层过滤 (Network Layer Filtering)**
    - 动态注入 OkHttp Interceptor，针对 `/g/pa` (placement 广告配置)、AdProLink、Sigmob、1rtb、Pangle、GDT、Kwad、Burying 埋点等流量实施本地拦截，返回纯净空响应。
 
+5. **运行日志 (Diagnostics Log)**
+   - 模块会把自身运行日志写入目标应用的外部目录，即使拿不到 logcat 也能取到。
+   - 主日志路径：`Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log`
+   - 尽力额外写入 `Download/XiaoCanPurify.log`（设备允许时）和应用私有目录。
+   - 任何线程（包括 OkHttp Dispatcher）的未捕获崩溃都会自动记录完整堆栈后进程才退出。
+
 ## 构建与安装
 
 - 编译环境：Microsoft JDK 17, Gradle 9.5.1, Android SDK 37 (compileSdk=37, minSdk=26)

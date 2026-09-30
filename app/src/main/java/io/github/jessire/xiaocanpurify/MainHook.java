@@ -60,6 +60,7 @@ public final class MainHook extends XposedModule {
                 Object result = chain.proceed();
                 Context context = (Context) chain.getArg(0);
                 if (context != null) {
+                    ModuleLog.attachContext(context);
                     ClassLoader cl = context.getClassLoader();
                     if (canLoadTargetClasses(cl)) {
                         installAll(xposed, cl);
@@ -77,6 +78,7 @@ public final class MainHook extends XposedModule {
                 Object result = chain.proceed();
                 Application app = (Application) chain.getThisObject();
                 if (app != null) {
+                    ModuleLog.attachContext(app);
                     ClassLoader cl = app.getClassLoader();
                     if (canLoadTargetClasses(cl)) {
                         installAll(xposed, cl);
@@ -93,6 +95,7 @@ public final class MainHook extends XposedModule {
             xposed.hook(actOnCreate).intercept(chain -> {
                 Activity activity = (Activity) chain.getThisObject();
                 if (activity != null) {
+                    ModuleLog.attachContext(activity);
                     ClassLoader cl = activity.getClassLoader();
                     if (canLoadTargetClasses(cl)) {
                         installAll(xposed, cl);
@@ -110,6 +113,8 @@ public final class MainHook extends XposedModule {
             return;
         }
         log("Target classes available, installing purifier hooks with ClassLoader: " + classLoader);
+
+        installContextCapture(xposed, classLoader);
 
         try {
             AdBlocker.install(xposed, classLoader);
@@ -171,15 +176,63 @@ public final class MainHook extends XposedModule {
         log("All XiaoCanPurify hooks successfully initialized!");
     }
 
+    /**
+     * Captures a {@link Context} as early as possible so {@link ModuleLog} can persist to a file.
+     * {@code Instrumentation.callApplicationOnCreate} runs once per process with the Application
+     * instance; {@code ContextWrapper.attachBaseContext} and {@code Activity.onCreate} act as
+     * fallbacks on roms where Instrumentation is patched.
+     */
+    private static void installContextCapture(XposedInterface xposed, ClassLoader classLoader) {
+        try {
+            Class<?> instrumentation = Class.forName("android.app.Instrumentation", false, classLoader);
+            Method callApplicationOnCreate = instrumentation.getDeclaredMethod("callApplicationOnCreate", Application.class);
+            xposed.hook(callApplicationOnCreate).intercept(chain -> {
+                Object app = chain.getArg(0);
+                if (app instanceof Context) {
+                    ModuleLog.attachContext((Context) app);
+                }
+                return chain.proceed();
+            });
+            log("Context capture hook installed (Instrumentation)");
+        } catch (Throwable t) {
+            log("Context capture hook failed (Instrumentation): " + t);
+        }
+
+        try {
+            Method attachBaseContext = android.content.ContextWrapper.class
+                    .getDeclaredMethod("attachBaseContext", Context.class);
+            xposed.hook(attachBaseContext).intercept(chain -> {
+                Object ctx = chain.getArg(0);
+                if (ctx instanceof Context) {
+                    ModuleLog.attachContext((Context) ctx);
+                }
+                return chain.proceed();
+            });
+            log("Context capture hook installed (ContextWrapper)");
+        } catch (Throwable t) {
+            log("Context capture hook failed (ContextWrapper): " + t);
+        }
+    }
+
     public static void log(String message) {
+        ModuleLog.log(message);
         MainHook hook = instance;
         if (hook != null) {
             try {
                 hook.log(Log.INFO, LOG_TAG, message);
-                return;
             } catch (Throwable ignored) {
             }
         }
-        Log.i(LOG_TAG, message);
+    }
+
+    public static void log(String message, Throwable tr) {
+        ModuleLog.log(message, tr);
+        MainHook hook = instance;
+        if (hook != null) {
+            try {
+                hook.log(Log.ERROR, LOG_TAG, message, tr);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 }

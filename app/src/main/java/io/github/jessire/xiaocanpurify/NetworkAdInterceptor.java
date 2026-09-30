@@ -1,6 +1,8 @@
 package io.github.jessire.xiaocanpurify;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Locale;
@@ -136,64 +138,102 @@ public final class NetworkAdInterceptor {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            if ("intercept".equals(method.getName()) && args != null && args.length == 1) {
-                Object chain = args[0];
-                Method requestMethod = chain.getClass().getMethod("request");
-                Object request = requestMethod.invoke(chain);
-
-                Method urlMethod = request.getClass().getMethod("url");
-                Object httpUrl = urlMethod.invoke(request);
-                String urlStr = httpUrl != null ? httpUrl.toString().toLowerCase(Locale.ROOT) : "";
-
-                // Check methodname header for blocked RPC calls
-                try {
-                    Method headerMethod = request.getClass().getMethod("header", String.class);
-                    String methodName = (String) headerMethod.invoke(request, "methodname");
-                    if (methodName != null) {
-                        String mLower = methodName.toLowerCase(Locale.ROOT);
-                        if (isWithdrawCardName(mLower)) {
-                            MainHook.log("Blocked withdraw card RPC");
-                            FlutterPageGuard.onWithdrawResponse();
-                            return createMockJsonResponse(request, "{\"code\":0,\"data\":{},\"msg\":\"ok\"}");
-                        }
-                        if (isDiscoveryName(mLower)) {
-                            MainHook.log("Blocked search discovery RPC");
-                            return createMockJsonResponse(request, EMPTY_DISCOVERY);
-                        }
-                    }
-                } catch (Throwable ignored) {}
-
-                if (isDiscoveryName(urlStr)) {
-                    MainHook.log("Blocked search discovery URL");
-                    try {
-                        return createMockJsonResponse(request, EMPTY_DISCOVERY);
-                    } catch (Throwable t) {
-                        MainHook.log("Mock response error: " + t);
-                    }
-                }
-
-                if (isAdOrTrackingUrl(urlStr)) {
-                    MainHook.log("Blocked ad network request: " + urlStr);
-                    try {
-                        return createMockJsonResponse(request, "{\"code\":0,\"data\":{},\"msg\":\"ok\"}");
-                    } catch (Throwable t) {
-                        MainHook.log("Mock response error: " + t);
-                    }
-                }
-
-                Method proceedMethod = chain.getClass().getMethod("proceed", request.getClass());
-                return proceedMethod.invoke(chain, request);
-            }
-            if ("equals".equals(method.getName())) {
+            String methodName = method.getName();
+            if ("equals".equals(methodName)) {
                 return proxy == (args != null && args.length > 0 ? args[0] : null);
             }
-            if ("hashCode".equals(method.getName())) {
+            if ("hashCode".equals(methodName)) {
                 return System.identityHashCode(proxy);
             }
-            if ("toString".equals(method.getName())) {
+            if ("toString".equals(methodName)) {
                 return "XiaoCanPurifyAdInterceptor";
             }
+            if (!"intercept".equals(methodName) || args == null || args.length != 1 || args[0] == null) {
+                return null;
+            }
+
+            Object chain = args[0];
+            Object request = null;
+            try {
+                request = chain.getClass().getMethod("request").invoke(chain);
+            } catch (Throwable ignored) {
+            }
+
+            // Never let an exception escape here: OkHttp rethrows any non-IOException
+            // from the dispatcher thread, which would crash the target app.
+            if (request != null) {
+                try {
+                    Object mock = matchMockResponse(request);
+                    if (mock != null) {
+                        return mock;
+                    }
+                } catch (Throwable t) {
+                    MainHook.log("Ad filter match failed, falling back: " + t);
+                }
+            }
+            return proceed(chain, request);
+        }
+
+        private Object matchMockResponse(Object request) throws Exception {
+            String urlStr = "";
+            try {
+                Object httpUrl = request.getClass().getMethod("url").invoke(request);
+                if (httpUrl != null) {
+                    urlStr = httpUrl.toString().toLowerCase(Locale.ROOT);
+                }
+            } catch (Throwable ignored) {
+            }
+
+            // Check methodname header for blocked RPC calls
+            try {
+                Object methodName = request.getClass().getMethod("header", String.class).invoke(request, "methodname");
+                if (methodName != null) {
+                    String mLower = methodName.toString().toLowerCase(Locale.ROOT);
+                    if (isWithdrawCardName(mLower)) {
+                        MainHook.log("Blocked withdraw card RPC");
+                        FlutterPageGuard.onWithdrawResponse();
+                        return createMockJsonResponse(request, "{\"code\":0,\"data\":{},\"msg\":\"ok\"}");
+                    }
+                    if (isDiscoveryName(mLower)) {
+                        MainHook.log("Blocked search discovery RPC");
+                        return createMockJsonResponse(request, EMPTY_DISCOVERY);
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+
+            if (isDiscoveryName(urlStr)) {
+                MainHook.log("Blocked search discovery URL");
+                return createMockJsonResponse(request, EMPTY_DISCOVERY);
+            }
+
+            if (isAdOrTrackingUrl(urlStr)) {
+                MainHook.log("Blocked ad network request: " + urlStr);
+                return createMockJsonResponse(request, "{\"code\":0,\"data\":{},\"msg\":\"ok\"}");
+            }
             return null;
+        }
+
+        private Object proceed(Object chain, Object request) throws IOException {
+            if (request == null) {
+                throw new IOException("OkHttp request unavailable in interceptor");
+            }
+            try {
+                Class<?> chainClass = Class.forName("okhttp3.Interceptor$Chain", false, classLoader);
+                Class<?> requestClass = Class.forName("okhttp3.Request", false, classLoader);
+                Method proceedMethod = chainClass.getMethod("proceed", requestClass);
+                return proceedMethod.invoke(chain, request);
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                if (cause instanceof IOException) throw (IOException) cause;
+                if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+                if (cause instanceof Error) throw (Error) cause;
+                throw new IOException(cause);
+            } catch (IOException e) {
+                throw e;
+            } catch (Throwable t) {
+                throw new IOException("OkHttp chain.proceed failed", t);
+            }
         }
 
         private static boolean isAdOrTrackingUrl(String url) {
@@ -212,8 +252,8 @@ public final class NetworkAdInterceptor {
         }
 
         private Object createMockJsonResponse(Object request, String json) throws Exception {
-            Class<?> responseClass = Class.forName("okhttp3.Response", false, classLoader);
             Class<?> responseBuilderClass = Class.forName("okhttp3.Response$Builder", false, classLoader);
+            Class<?> requestClass = Class.forName("okhttp3.Request", false, classLoader);
             Class<?> responseBodyClass = Class.forName("okhttp3.ResponseBody", false, classLoader);
             Class<?> mediaTypeClass = Class.forName("okhttp3.MediaType", false, classLoader);
             Class<?> protocolClass = Class.forName("okhttp3.Protocol", false, classLoader);
@@ -227,7 +267,7 @@ public final class NetworkAdInterceptor {
             Object http11 = Enum.valueOf((Class<Enum>) protocolClass, "HTTP_1_1");
 
             Object builder = responseBuilderClass.getConstructor().newInstance();
-            responseBuilderClass.getMethod("request", request.getClass()).invoke(builder, request);
+            responseBuilderClass.getMethod("request", requestClass).invoke(builder, request);
             responseBuilderClass.getMethod("protocol", protocolClass).invoke(builder, http11);
             responseBuilderClass.getMethod("code", int.class).invoke(builder, 200);
             responseBuilderClass.getMethod("message", String.class).invoke(builder, "OK");
