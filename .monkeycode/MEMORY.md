@@ -43,5 +43,6 @@ This file records user instructions, preferences, and teachings for reference in
 - Category: Troubleshooting & Debugging
 - Instructions:
   - Target app `com.realtech.xiaocan` may use ShellApplication / Aliyun Jiagu packing; hook `Application`/`Activity` lifecycle when target classes are not loadable at `onPackageReady`.
-  - The module writes runtime logs and uncaught-exception stack traces to `Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log` (also best-effort `Download/XiaoCanPurify.log`). Ask the user to send this file when the app crashes, since logcat is not always accessible.
+  - The module logs are disabled by default. Users enable them from the module app "运行日志" switch, which writes the framework remote preference group `xiaocanpurify` key `enable_log` (module app writes via `XposedServiceHelper`; target reads via `XposedInterface.getRemotePreferences`). Restart the target app after toggling.
+  - When enabled, runtime logs and uncaught crash stack traces go to `Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log` (also best-effort `Download/XiaoCanPurify.log`). Ask the user to send this file after a crash, since logcat is not always accessible.
   - OkHttp's `AsyncCall.run()` rethrows non-`IOException` throwables from the dispatcher thread; module interceptors must convert any failure to a passthrough or `IOException` to avoid crashing the target app.
