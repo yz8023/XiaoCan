@@ -229,8 +229,6 @@ public final class NetworkAdInterceptor {
                 if (cause instanceof RuntimeException) throw (RuntimeException) cause;
                 if (cause instanceof Error) throw (Error) cause;
                 throw new IOException(cause);
-            } catch (IOException e) {
-                throw e;
             } catch (Throwable t) {
                 throw new IOException("OkHttp chain.proceed failed", t);
             }
