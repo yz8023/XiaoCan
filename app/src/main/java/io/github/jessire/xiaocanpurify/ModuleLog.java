@@ -1,6 +1,7 @@
 package io.github.jessire.xiaocanpurify;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Environment;
 import android.util.Log;
 
@@ -13,18 +14,25 @@ import java.util.ArrayDeque;
 import java.util.Date;
 import java.util.Locale;
 
+import io.github.libxposed.api.XposedInterface;
+
 /**
  * File-backed logger for the XiaoCanPurify module.
  *
- * <p>Everything is written to {@code Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log}
- * (plus a best-effort copy in Downloads and the app-private files dir). The file can be pulled
- * with any file manager or {@code adb pull}, which makes it possible to collect diagnostics even
- * when logcat is not accessible.</p>
+ * <p>Logging is <b>disabled by default</b> and can be turned on from the module app's settings.
+ * The setting lives in the framework remote preferences group {@link #PREFS_GROUP}
+ * ({@link #KEY_ENABLED}), written from {@link MainActivity} and read back (read-only) in the
+ * target process.</p>
  *
- * <p>An uncaught-exception handler is installed so a fatal crash (for example the one on the
- * OkHttp dispatcher thread) is persisted to the log before the process dies.</p>
+ * <p>When enabled, entries are written to
+ * {@code Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log} (plus a best-effort copy in
+ * Downloads and the app-private files dir), and an uncaught-exception handler persists fatal stack
+ * traces before the process dies.</p>
  */
 public final class ModuleLog {
+    public static final String PREFS_GROUP = "xiaocanpurify";
+    public static final String KEY_ENABLED = "enable_log";
+
     private static final String TAG = "XiaoCanPurify";
     private static final String FILE_NAME = "XiaoCanPurify.log";
     private static final long MAX_BYTES = 2L * 1024 * 1024;
@@ -35,12 +43,41 @@ public final class ModuleLog {
     private static final SimpleDateFormat STAMP =
             new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US);
 
+    private static volatile XposedInterface xposed;
     private static volatile Context appContext;
     private static volatile File[] sinks;
     private static volatile boolean crashHandlerInstalled;
-    private static volatile boolean pathLogged;
+    private static volatile Boolean enabled;
 
     private ModuleLog() {}
+
+    /** Called once the module entry is loaded so the remote setting can be read. */
+    public static void bind(XposedInterface x) {
+        xposed = x;
+        enabled = null;
+    }
+
+    /** Whether logging is currently enabled; reads the module's remote preference. */
+    public static boolean isEnabled() {
+        Boolean e = enabled;
+        if (e == null) {
+            enabled = e = readEnabled();
+        }
+        return e;
+    }
+
+    private static boolean readEnabled() {
+        XposedInterface x = xposed;
+        if (x == null) {
+            return false;
+        }
+        try {
+            SharedPreferences prefs = x.getRemotePreferences(PREFS_GROUP);
+            return prefs.getBoolean(KEY_ENABLED, false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
 
     /** Called as soon as a usable {@link Context} is available in the target process. */
     public static void attachContext(Context context) {
@@ -50,15 +87,15 @@ public final class ModuleLog {
         try {
             Context app = context.getApplicationContext();
             appContext = app != null ? app : context;
+            if (!isEnabled()) {
+                return;
+            }
             installCrashHandler();
             synchronized (LOCK) {
                 sinks = resolveSinks(appContext);
                 flushPendingLocked();
             }
-            if (!pathLogged) {
-                pathLogged = true;
-                log("Log file: " + describeSinks());
-            }
+            log("Log file: " + describeSinks());
         } catch (Throwable ignored) {
         }
     }
@@ -68,10 +105,13 @@ public final class ModuleLog {
     }
 
     public static void log(String message, Throwable tr) {
-        write("E", message, tr);
+        write(tr == null ? "I" : "E", message, tr);
     }
 
     private static void write(String level, String message, Throwable tr) {
+        if (!isEnabled()) {
+            return;
+        }
         String line;
         try {
             line = format(level, message, tr);
@@ -85,11 +125,15 @@ public final class ModuleLog {
         }
         synchronized (LOCK) {
             if (sinks == null) {
-                if (PENDING.size() >= BUFFER_LIMIT) {
-                    PENDING.pollFirst();
+                if (appContext == null) {
+                    if (PENDING.size() >= BUFFER_LIMIT) {
+                        PENDING.pollFirst();
+                    }
+                    PENDING.addLast(line);
+                    return;
                 }
-                PENDING.addLast(line);
-                return;
+                sinks = resolveSinks(appContext);
+                flushPendingLocked();
             }
             appendLocked(line);
         }

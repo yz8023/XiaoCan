@@ -22,6 +22,7 @@ public final class MainHook extends XposedModule {
     @Override
     public void onModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
         instance = this;
+        ModuleLog.bind(this);
         log("XiaoCanPurify API 102 module loaded.");
     }
 
@@ -215,6 +216,9 @@ public final class MainHook extends XposedModule {
     }
 
     public static void log(String message) {
+        if (!ModuleLog.isEnabled()) {
+            return;
+        }
         ModuleLog.log(message);
         MainHook hook = instance;
         if (hook != null) {
@@ -226,6 +230,9 @@ public final class MainHook extends XposedModule {
     }
 
     public static void log(String message, Throwable tr) {
+        if (!ModuleLog.isEnabled()) {
+            return;
+        }
         ModuleLog.log(message, tr);
         MainHook hook = instance;
         if (hook != null) {

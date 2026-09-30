@@ -4,12 +4,22 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 
+import io.github.libxposed.service.XposedService;
+import io.github.libxposed.service.XposedServiceHelper;
+
 public class MainActivity extends Activity {
+    private XposedService service;
+    private Switch logSwitch;
+    private Boolean pendingEnable;
+    private boolean updating;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,6 +65,46 @@ public class MainActivity extends Activity {
         statusCard.addView(statusDesc);
         layout.addView(statusCard);
 
+        // Settings Card: logging toggle
+        LinearLayout settingsCard = createCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout rowText = new LinearLayout(this);
+        rowText.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        rowText.setLayoutParams(textLp);
+
+        TextView logTitle = new TextView(this);
+        logTitle.setText("运行日志");
+        logTitle.setTextSize(14);
+        logTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        logTitle.setTextColor(Color.parseColor("#222222"));
+        rowText.addView(logTitle);
+
+        TextView logDesc = new TextView(this);
+        logDesc.setText("默认关闭。开启后写入 Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log，重启小蚕生效。");
+        logDesc.setTextSize(12);
+        logDesc.setTextColor(Color.parseColor("#888888"));
+        logDesc.setPadding(0, dp2px(2), 0, 0);
+        rowText.addView(logDesc);
+
+        logSwitch = new Switch(this);
+        row.addView(rowText);
+        row.addView(logSwitch);
+        settingsCard.addView(row);
+        layout.addView(settingsCard);
+
+        logSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (updating) {
+                return;
+            }
+            pendingEnable = checked;
+            applyLogEnabled();
+        });
+        bindLogService();
+
         // Section Title
         TextView sectionTitle = new TextView(this);
         sectionTitle.setText("已启用的功能");
@@ -95,6 +145,55 @@ public class MainActivity extends Activity {
 
         scrollView.addView(layout);
         setContentView(scrollView);
+    }
+
+    private void bindLogService() {
+        XposedServiceHelper.registerListener(new XposedServiceHelper.OnServiceListener() {
+            @Override
+            public void onServiceBind(XposedService service) {
+                MainActivity.this.service = service;
+                runOnUiThread(MainActivity.this::syncLogEnabled);
+            }
+
+            @Override
+            public void onServiceDied(XposedService service) {
+                if (MainActivity.this.service == service) {
+                    MainActivity.this.service = null;
+                }
+            }
+        });
+    }
+
+    private void syncLogEnabled() {
+        Boolean pending = pendingEnable;
+        if (pending != null) {
+            pendingEnable = null;
+            applyLogEnabled();
+            return;
+        }
+        if (logSwitch == null || service == null) {
+            return;
+        }
+        boolean enabled = false;
+        try {
+            enabled = service.getRemotePreferences(ModuleLog.PREFS_GROUP)
+                    .getBoolean(ModuleLog.KEY_ENABLED, false);
+        } catch (Throwable ignored) {
+        }
+        updating = true;
+        logSwitch.setChecked(enabled);
+        updating = false;
+    }
+
+    private void applyLogEnabled() {
+        if (pendingEnable == null || service == null) {
+            return;
+        }
+        try {
+            service.getRemotePreferences(ModuleLog.PREFS_GROUP)
+                    .edit().putBoolean(ModuleLog.KEY_ENABLED, pendingEnable).apply();
+        } catch (Throwable ignored) {
+        }
     }
 
     private LinearLayout createCard() {
