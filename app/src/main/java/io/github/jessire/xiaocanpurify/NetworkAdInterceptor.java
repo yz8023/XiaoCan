@@ -55,6 +55,8 @@ public final class NetworkAdInterceptor {
     private static void hookNativeHttpBridge(XposedInterface xposed, ClassLoader cl) {
         try {
             Class<?> bridgeClass = Class.forName("com.realtech.xiaocan.flutter.NativeHttpBridge", false, cl);
+            Method replySuccess = Class.forName("io.flutter.plugin.common.MethodChannel$Result", false, cl)
+                    .getMethod("success", Object.class);
             for (Method m : bridgeClass.getDeclaredMethods()) {
                 if ("createBridge$lambda$2".equals(m.getName())) {
                     xposed.hook(m).intercept(chain -> {
@@ -72,12 +74,12 @@ public final class NetworkAdInterceptor {
                                 String s = ((service == null ? "" : service) + " "
                                         + (serverName == null ? "" : serverName) + " "
                                         + (path == null ? "" : path)).toLowerCase(Locale.ROOT);
-                                if (isBlockedFlutterService(s)) {
+                                Object data = argumentMethod.invoke(call, "data");
+                                if (isBlockedFlutterService(s) || WithdrawAdPolicy.isAdPlacement(s, data)) {
                                     MainHook.log(isDiscoveryName(s)
                                             ? "Blocked search discovery"
                                             : "Blocked withdraw card request");
-                                    Method success = result.getClass().getMethod("success", Object.class);
-                                    success.invoke(result, isDiscoveryName(s) ? EMPTY_DISCOVERY : null);
+                                    replySuccess.invoke(result, isDiscoveryName(s) ? EMPTY_DISCOVERY : null);
                                     if (isWithdrawCardName(s)) FlutterPageGuard.onWithdrawResponse();
                                     return null;
                                 }
@@ -108,6 +110,8 @@ public final class NetworkAdInterceptor {
                 || s.contains("bawangcan_banner")
                 || s.contains("candoutx_banner")
                 || s.contains("user_withdraw_banner")
+                || s.contains("user_withdraw_dialog_ad")
+                || s.contains("withdrawal_success_popup")
                 || s.contains("ismemberbysilkid")
                 || s.contains("listexchangeproduct"));
     }
@@ -208,7 +212,7 @@ public final class NetworkAdInterceptor {
             }
 
             if (isAdOrTrackingUrl(urlStr)) {
-                MainHook.log("Blocked ad network request: " + urlStr);
+                MainHook.log("Blocked ad network request");
                 return createMockJsonResponse(request, "{\"code\":0,\"data\":{},\"msg\":\"ok\"}");
             }
             return null;
