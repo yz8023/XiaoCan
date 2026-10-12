@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-1. **广告过滤 (Ads Filtering)**
+1. **去除所有广告 (All Ads Removal)**
    - **冷启动开屏广告**：自动秒跳 `SplashActivity` / `BaseAdActivity` 进入主界面。
    - **切后台热启动开屏**：拦截 `SplashAdUtils.initAd` 与 `SplashAdPlacementManager.refreshAsync`，彻底阻断回到前台时的开屏广告。
    - **全屏/激励/插屏广告**：拦截并自动关闭穿山甲 (CSJ/Pangle)、优量汇 (GDT)、快手 (Kwad)、Sigmob、Baidu、ToBid/WindMill、Beizi 等第三方 SDK 广告 Activity。
@@ -31,6 +31,12 @@
 4. **网络层过滤 (Network Layer Filtering)**
    - 动态注入 OkHttp Interceptor，针对 `/g/pa` (placement 广告配置)、AdProLink、Sigmob、1rtb、Pangle、GDT、Kwad、Burying 埋点等流量实施本地拦截，返回纯净空响应。
 
+5. **运行日志 (Diagnostics Log)**
+   - 日志默认关闭：打开「小蚕净化」App，在「运行日志」处开启开关，然后重启小蚕霸王餐生效。
+   - 开启后模块把运行日志写入目标应用外部目录：`Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log`
+   - 尽力额外写入 `Download/XiaoCanPurify.log`（设备允许时）和应用私有目录。
+   - 任何线程（包括 OkHttp Dispatcher）的未捕获崩溃都会自动记录完整堆栈后进程才退出。
+
 ## 最新版本
 
 当前版本: **1.2** (`versionCode=3`), 针对小蚕 **3.21.2** 核对并测试.
@@ -48,10 +54,16 @@
 本地运行 `powershell -File tests/run.ps1`, 需准备 JDK 17、Gradle 9.5.1 和 Android SDK 37.
 测试使用 JVM 接口替身调用生产 hook, 与真机验证分别记录.
 
+## 同步上游
+
+本仓库的上游是 `Jessire/XiaoCanPurify`, 本地功能以独立提交栈形式保存在上游历史之上.
+上游发新版后, 运行 `bash sync-upstream.sh` 即可把功能栈变基到上游最新版本, 本地功能自动保留.
+
 ## 构建与安装
 
 - 编译环境：Microsoft JDK 17, Gradle 9.5.1, Android SDK 37 (compileSdk=37, minSdk=26)
-- 产物路径：`XiaoCanPurify-1.2-release.apk`
+- 产物路径：`XiaoCanPurify-1.2-release.apk`（CI 产物暂名 `XiaoCanPurify-1.0.0-release.apk`，待凭据具备 workflow scope 后统一）
+- 推送到 `main` 会触发 GitHub Actions 自动构建并发布 Release（无需本地编译环境）
 - 安装步骤：
   1. 将生成的 APK 安装到设备。
   2. 在 LSPosed Manager 中启用「小蚕净化」模块。
