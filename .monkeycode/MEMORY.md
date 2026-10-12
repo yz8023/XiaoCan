@@ -28,12 +28,16 @@ This file records user instructions, preferences, and teachings for reference in
 ## Entries
 
 [Project Knowledge Summary]
-- Date: 2026-09-30
-- Context: Discovered by Agent while adding diagnostics logging and producing a release APK
+- Date: 2026-09-30, updated 2026-10-12
+- Context: Discovered by Agent while adding diagnostics logging and producing a release APK; revised after a successful local build
 - Category: Environment Configuration
 - Instructions:
-  - The current sandbox has no JDK, Gradle, or Android SDK installed and only ~200 MB free RAM, so the APK cannot be built locally.
-  - Build the APK through the GitHub Actions workflow at `.github/workflows/android-release.yml` instead. Pushing to `main` triggers it; it publishes a GitHub Release tagged `build-<run_number>` with asset `XiaoCanPurify-<version>-release.apk`.
+  - Local build IS possible: install JDK 17 (`apt-get update && apt-get install -y openjdk-17-jdk-headless`), Gradle 9.5.1 (unzip to /opt/gradle), Android cmdline-tools; run builds in a background terminal with `memory_percent: 70` — the host memory balloon deflates to satisfy the cgroup and the build finished in ~7 min.
+  - sdkmanager needs `--channel=3` and minor-versioned names: bare `platforms;android-37` fails; install `platforms;android-37.0` (+37.1) and `build-tools;37.0.0`.
+  - Write `sdk.dir=/opt/android-sdk` to `local.properties` and `org.gradle.jvmargs=-Xmx3g` to `/root/.gradle/gradle.properties`; build with `/opt/gradle/gradle-9.5.1/bin/gradle :app:assembleRelease --no-daemon`.
+  - Regression tests run on Linux equivalent to tests/run.ps1: classpath `app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes:<sdk>/platforms/android-37.0/android.jar:<xposed api-102.0.0-api.jar from ~/.gradle/caches/transforms>`; compile `find tests -name '*.java'` with javac, run `RegressionTests`.
+  - CI remains the release publisher: pushing to `main` triggers `.github/workflows/android-release.yml`, which publishes a GitHub Release tagged `build-<run_number>` with the APK asset.
+  - The push credential's PAT lacks `workflow` scope: any push touching `.github/workflows/*` is rejected. Keep the workflow file byte-identical to origin (its APK asset name stays `XiaoCanPurify-1.0.0-release.apk` until a workflow-scoped token is available).
   - The `android-actions/setup-android@v3` action fails on current runners (`sdkmanager tools` package removed). Use the runner's preinstalled SDK at `/usr/local/lib/android/sdk` and call `sdkmanager` from `cmdline-tools/latest/bin`.
   - Toolchain versions: JDK 17, Gradle 9.5.1, AGP 9.2.1, compileSdk 37.
 
