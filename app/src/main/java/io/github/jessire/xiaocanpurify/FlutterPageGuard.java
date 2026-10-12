@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.SurfaceView;
 import android.view.View;
@@ -25,7 +24,6 @@ import io.github.libxposed.api.XposedInterface;
  * removed it. The page itself stays visible from the first frame.
  */
 public final class FlutterPageGuard {
-    private static final String TAG = "XiaoCanPurify";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final WeakHashMap<Activity, View> COVER = new WeakHashMap<>();
     private static volatile long withdrawRouteAt;
@@ -46,7 +44,7 @@ public final class FlutterPageGuard {
                 }
             }
         } catch (Throwable t) {
-            Log.i(TAG, "Withdraw texture resolve failed: " + t);
+            MainHook.log("Withdraw texture resolve failed: " + t);
         }
         try {
             Class<?> flutterActivity = Class.forName("io.flutter.embedding.android.FlutterActivity", false, classLoader);
@@ -56,14 +54,14 @@ public final class FlutterPageGuard {
                 if (isWithdrawRouteWindow() && !textureApplied && renderModeTexture != null) {
                     textureApplied = true;
                     withdrawRouteAt = 0;
-                    Log.i(TAG, "Withdraw forced to texture mode");
+                    MainHook.log("Withdraw forced to texture mode");
                     return renderModeTexture;
                 }
                 return chain.proceed();
             });
-            Log.i(TAG, "Withdraw texture hook installed");
+            MainHook.log("Withdraw texture hook installed");
         } catch (Throwable t) {
-            Log.i(TAG, "Withdraw texture hook failed: " + t);
+            MainHook.log("Withdraw texture hook failed: " + t);
         }
         try {
             Method onAttached = View.class.getDeclaredMethod("onAttachedToWindow");
@@ -73,15 +71,15 @@ public final class FlutterPageGuard {
                 if (self instanceof SurfaceView && isFlutterSurface((SurfaceView) self)) {
                     try {
                         ((SurfaceView) self).setZOrderOnTop(false);
-                        Log.i(TAG, "Withdraw surface moved behind window");
+                        MainHook.log("Withdraw surface moved behind window");
                     } catch (Throwable t) {
-                        Log.i(TAG, "setZOrderedOnTop failed: " + t);
+                        MainHook.log("setZOrderedOnTop failed: " + t);
                     }
                 }
                 return result;
             });
         } catch (Throwable t) {
-            Log.i(TAG, "Surface z-order hook failed: " + t);
+            MainHook.log("Surface z-order hook failed: " + t);
         }
         try {
             Method onResume = Activity.class.getDeclaredMethod("onResume");
@@ -91,9 +89,9 @@ public final class FlutterPageGuard {
                 if (self instanceof Activity) holdIfWithdraw((Activity) self);
                 return result;
             });
-            Log.i(TAG, "Withdraw guard installed");
+            MainHook.log("Withdraw guard installed");
         } catch (Throwable t) {
-            Log.i(TAG, "Withdraw guard failed: " + t);
+            MainHook.log("Withdraw guard failed: " + t);
         }
     }
 
@@ -118,7 +116,7 @@ public final class FlutterPageGuard {
                 });
             }
         } catch (Throwable t) {
-            Log.i(TAG, "Route hook failed: " + className);
+            MainHook.log("Route hook failed: " + className);
         }
     }
 
@@ -135,7 +133,7 @@ public final class FlutterPageGuard {
             ((ViewGroup) content).addView(cover, params);
             COVER.put(activity, cover);
             MAIN.postDelayed(() -> removeCover(activity), 1800);
-            Log.i(TAG, "Withdraw bottom cover added");
+            MainHook.log("Withdraw bottom cover added");
         }
     }
 
@@ -144,7 +142,7 @@ public final class FlutterPageGuard {
         if (cover != null) {
             ViewGroup parent = (ViewGroup) cover.getParent();
             if (parent != null) parent.removeView(cover);
-            Log.i(TAG, "Withdraw bottom cover removed");
+            MainHook.log("Withdraw bottom cover removed");
         }
     }
 
