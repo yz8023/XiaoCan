@@ -39,15 +39,14 @@
 
 ## 最新版本
 
-当前版本: **1.2** (`versionCode=3`), 针对小蚕 **3.21.2** 核对并测试.
+当前版本: **1.2.1** (`versionCode=4`), 基于上游 1.2, 针对小蚕 **3.21.2** 核对并测试.
 
-- 补全提现页与提现成功弹窗广告位拦截 (`WITHDRAWAL_SUCCESS_POPUP`、`WITHDRAWALPAGE_POPUP`、广告位 `8876` 及列表型 `resource_slug` 参数), 不丢弃混合业务广告位请求.
-- 恢复正常下拉刷新, 只屏蔽下拉进入第二层.
-- 补充首页运营弹窗、详情页 ToBid 广告与 Flutter 广告通道过滤.
-- 移除提现右侧会员轮播及详情页“分享赚豆”浮动入口.
-- 增加报名自动外跳保护及淘宝安装领红包提示拦截.
+- 新增运行日志功能: 打开「小蚕净化」App, 在「运行日志」处开启开关并重启小蚕生效, 运行日志与未捕获崩溃堆栈写入 `Android/data/com.realtech.xiaocan/files/XiaoCanPurify.log`, 便于真机问题排查.
+- 网络拦截器崩溃安全加固: 广告过滤、模拟响应与放行全程捕获异常, OkHttp 调度线程不会再把模块内部异常抛回目标应用导致闪退.
+- 模块内部日志统一走运行日志通道, 受「运行日志」开关控制.
+- 推送 `main` 由 GitHub Actions 自动构建并发布 Release, 版本标签 `1.2.1`.
 
-完整更新内容见 [更新日志](CHANGELOG.md).
+上游 1.2 的完整更新内容见 [更新日志](CHANGELOG.md).
 
 ## 回归测试
 
@@ -62,7 +61,7 @@
 ## 构建与安装
 
 - 编译环境：Microsoft JDK 17, Gradle 9.5.1, Android SDK 37 (compileSdk=37, minSdk=26)
-- 产物路径：`XiaoCanPurify-1.2-release.apk`（CI 产物暂名 `XiaoCanPurify-1.0.0-release.apk`，待凭据具备 workflow scope 后统一）
+- 产物路径：`XiaoCanPurify-1.2.1-release.apk`（CI 产物暂名 `XiaoCanPurify-1.0.0-release.apk`，待凭据具备 workflow scope 后统一）
 - 推送到 `main` 会触发 GitHub Actions 自动构建并发布 Release（无需本地编译环境）
 - 安装步骤：
   1. 将生成的 APK 安装到设备。
